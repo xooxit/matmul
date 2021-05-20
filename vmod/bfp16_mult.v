@@ -79,6 +79,20 @@ module bfp16_mult(clk, rst, A, B, O);
 			o_sign = b_sign;
 	 		o_exponent = 255;
 			o_mantissa = b_mantissa;
+		//if a is zero and b is inf return NaN
+		end else if((a_exponent == 0 && a_mantissa[6:0] == 0) && b_exponent == 255) begin
+			multiplier_a_in = 0;	//dummy
+			multiplier_b_in = 0;	//dummy
+	  	o_sign = 0;
+		  o_exponent = 255;
+	 		o_mantissa = 1;
+		//if b is zero and a is inf return NaN
+		end else if((b_exponent == 0 && b_mantissa[6:0] == 0) && a_exponent == 255) begin
+			multiplier_a_in = 0;	//dummy
+			multiplier_b_in = 0;	//dummy
+	  	o_sign = 0;
+		  o_exponent = 255;
+	 		o_mantissa = 1;
 		//If a or b is 0 return 0
 		end else if ((a_exponent == 0 && a_mantissa[6:0] == 0) || (b_exponent == 0 && b_mantissa[6:0] == 0)) begin
 			state = 3'b011;				//debug
@@ -120,10 +134,11 @@ module gMultiplier(a, b, out);
   reg [7:0] b_mantissa;
 
   reg o_sign;
-  reg [7:0] o_exponent;
-  reg [7:0] o_exponent_tmp;
+  reg [8:0] o_exponent; // fix? [8:0] o_exponent
+  reg [8:0] o_exponent_tmp;
   reg [8:0] o_exponent_sum;
-  reg [7:0] o_exponent_denormed;
+  reg [7:0] o_exponent_minus;
+	reg [7:0] o_exponent_shift;
   reg [8:0] o_mantissa;
 
   reg [15:0] product;
@@ -144,7 +159,7 @@ module gMultiplier(a, b, out);
 	wire [15:0] tmp;
 
   assign tmp[15] = o_sign;
-  assign tmp[14:7] = o_exponent;
+  assign tmp[14:7] = o_exponent[7:0];
   assign tmp[6:0] = o_mantissa[6:0];
 
   multiplication_normaliser norm1
@@ -158,8 +173,8 @@ module gMultiplier(a, b, out);
   always @ ( * ) begin
 		
 		a_sign = a[15];
-		//Denorm number
 		if(a[14:7] == 0) begin
+			//Denorm number
 			state1 = 0;
 			a_exponent = 8'b00000001;
 			a_mantissa = {1'b0, a[6:0]};
@@ -170,8 +185,8 @@ module gMultiplier(a, b, out);
 		end
    
 		b_sign = b[15];
-		//Denorm number
 		if(b[14:7] == 0) begin
+			//Denorm number
 			state2 = 0;
 			b_exponent = 8'b00000001;
 			b_mantissa = {1'b0, b[6:0]};
@@ -182,53 +197,66 @@ module gMultiplier(a, b, out);
 		end
    
     o_sign 							= a_sign ^ b_sign;
-		o_exponent_sum			= a_exponent + b_exponent;
-		o_exponent_tmp			= o_exponent_sum - 127 < 0 ? 0 : o_exponent_sum - 127; //debug
-	  o_exponent 					= o_exponent_sum - 127 < 0 ? 0 : o_exponent_sum - 127;
-		o_exponent_denormed = o_exponent_sum - 127 < 0 ? 127 - o_exponent_sum : 0;
+		o_exponent_sum			= a_exponent + b_exponent; // 2(1+1) ~ 508(254+254)
+		o_exponent_tmp			= o_exponent_sum < 127 ? 0 : o_exponent_sum - 127; //debug
+	  o_exponent 					= o_exponent_sum < 127 ? 0 : o_exponent_sum - 127; // 0 ~ 381
+		o_exponent_minus		= o_exponent_sum < 127 ? 127 - o_exponent_sum : 0; // 0 ~ 125
+		o_exponent_shift		= o_exponent_minus + 1; // 1 ~ 126
     product 						= a_mantissa * b_mantissa;
-    
-		// Normalization
-		if (o_exponent != 0) begin
 
-			if (product[15] == 1) begin
+		
+		// infinity
+		if (o_exponent >= 255) begin
+			o_exponent 	= 255;
+			product 		= 0;
+   
+		// Normalization
+		end else if (o_exponent != 0) begin // 0 < o_exponent < 255
+			if (product[15] == 1 && (o_exponent + 1) == 255) begin
+				// infinity
+				o_exponent 	= 255;
+				product 		= 0;
+
+			end else if (product[15] == 1) begin
+				// normal 
 				o_exponent 	= o_exponent + 1;
 				product 		= product >> 1;
 
 			end else if (product[14] != 1) begin
+				// denormal
 	      i_e 				= o_exponent;
 	      i_m 				= product;
 	      o_exponent 	= o_e;
 	      product 		= o_m;
 
 			end else begin
-				//noraml case
+				//noraml 
 				o_exponent 	= o_exponent;
 				product 		= product;
 			end
 
-			o_mantissa = product[14:7];
+		end else begin // 0 == o_exponent
+			// makes denormed format
+			product = product >> o_exponent_shift;
+			o_exponent = 1;
 
-		end
-/*
-    //if(product[13] == 1) begin
-    if(product[15] == 1) begin // fix
-		// both are normal number
-			state3 = 2'b00;
-      o_exponent = o_exponent + 1;
-      product = product >> 1;
+			if (product[15] == 1) begin
+				// nothing because 'o_exponent_shift' is equal or bigger than 1
 
-    end else if((product[14] != 1) && (o_exponent != 0)) begin 
-		// product[14] != 1 and o_exponent !=0 -> (product is denrom number)
-			state3 = 2'b01; // debug
-      i_e = o_exponent;
-      i_m = product;
-      o_exponent = o_e;
-      product = o_m;
+			end else if (product[14] != 1) begin
+				// denormed out
+				o_exponent = 0;
+				product = product;
+
+			end else begin
+				// normal out
+				o_exponent = o_exponent;
+				product = product;
+			end
+
 		end
 
 		o_mantissa = product[14:7];
-*/
 
   end
 
