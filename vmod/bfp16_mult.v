@@ -68,31 +68,31 @@ module bfp16_mult(clk, rst, A, B, O);
 			state = 3'b001;				//debug
 			multiplier_a_in = 0;	//dummy
 			multiplier_b_in = 0;	//dummy
-      o_sign = a_sign;
-      o_exponent = 255;
-      o_mantissa = a_mantissa;
+			o_sign = 1'b1;
+			o_exponent = 7'b1111111;
+			o_mantissa = 8'b11111111;
 		//If b is NaN return NaN
 		end else if (b_exponent == 255 && b_mantissa[6:0] != 0) begin
 			state = 3'b010;				//debug
 			multiplier_a_in = 0;	//dummy
 			multiplier_b_in = 0;	//dummy
-			o_sign = b_sign;
-	 		o_exponent = 255;
-			o_mantissa = b_mantissa;
+			o_sign = 1'b1;
+			o_exponent = 7'b1111111;
+			o_mantissa = 8'b11111111;
 		//if a is zero and b is inf return NaN
 		end else if((a_exponent == 0 && a_mantissa[6:0] == 0) && b_exponent == 255) begin
 			multiplier_a_in = 0;	//dummy
 			multiplier_b_in = 0;	//dummy
-	  	o_sign = 0;
-		  o_exponent = 255;
-	 		o_mantissa = 1;
+			o_sign = 1'b1;
+			o_exponent = 7'b1111111;
+			o_mantissa = 8'b11111111;
 		//if b is zero and a is inf return NaN
 		end else if((b_exponent == 0 && b_mantissa[6:0] == 0) && a_exponent == 255) begin
 			multiplier_a_in = 0;	//dummy
 			multiplier_b_in = 0;	//dummy
-	  	o_sign = 0;
-		  o_exponent = 255;
-	 		o_mantissa = 1;
+			o_sign = 1'b1;
+			o_exponent = 7'b1111111;
+			o_mantissa = 8'b11111111;
 		//If a or b is 0 return 0
 		end else if ((a_exponent == 0 && a_mantissa[6:0] == 0) || (b_exponent == 0 && b_mantissa[6:0] == 0)) begin
 			state = 3'b011;				//debug
@@ -204,56 +204,46 @@ module gMultiplier(a, b, out);
 		o_exponent_shift		= o_exponent_minus + 1; // 1 ~ 126
     product 						= a_mantissa * b_mantissa;
 
-		
 		// infinity
 		if (o_exponent >= 255) begin
 			o_exponent 	= 255;
 			product 		= 0;
-   
 		// Normalization
 		end else if (o_exponent != 0) begin // 0 < o_exponent < 255
 			if (product[15] == 1 && (o_exponent + 1) == 255) begin
 				// infinity
 				o_exponent 	= 255;
 				product 		= 0;
-
 			end else if (product[15] == 1) begin
 				// normal 
 				o_exponent 	= o_exponent + 1;
 				product 		= product >> 1;
-
 			end else if (product[14] != 1) begin
 				// denormal
 	      i_e 				= o_exponent;
 	      i_m 				= product;
 	      o_exponent 	= o_e;
 	      product 		= o_m;
-
 			end else begin
 				//noraml 
 				o_exponent 	= o_exponent;
 				product 		= product;
 			end
-
 		end else begin // 0 == o_exponent
 			// makes denormed format
 			product = product >> o_exponent_shift;
 			o_exponent = 1;
-
 			if (product[15] == 1) begin
 				// nothing because 'o_exponent_shift' is equal or bigger than 1
-
 			end else if (product[14] != 1) begin
 				// denormed out
 				o_exponent = 0;
 				product = product;
-
 			end else begin
 				// normal out
 				o_exponent = o_exponent;
 				product = product;
 			end
-
 		end
 
 		o_mantissa = product[14:7];
@@ -280,7 +270,112 @@ module multiplication_normaliser(in_e, in_m, out_e, out_m);
 	reg [1:0] instate;//debug
 
   always @ ( * ) begin
-		if (in_m[14:7] == 8'b000001) begin // 0.0000001 = o_mantissa starts as
+		if (in_m[14:0] == 15'b000000000000001) begin // 0.00000000000001 = o_mantissa starts as
+			state = 3'b000; //debug
+			if (in_e < 2) begin
+				instate = 0;  //debug
+				out_e = 0;
+				out_m = in_m; 
+			end else if (in_e > 14) begin
+				instate = 1;  //debug
+				out_e = in_e - 14;
+				out_m = in_m << 14;
+			end else begin
+				instate = 2;  //debug
+				out_e = 0;
+				out_m = in_m << (in_e-1);
+			end	
+		end if (in_m[14:1] == 14'b00000000000001) begin // 0.0000000000001 = o_mantissa starts as
+			state = 3'b000; //debug
+			if (in_e < 2) begin
+				instate = 0;  //debug
+				out_e = 0;
+				out_m = in_m; 
+			end else if (in_e > 13) begin
+				instate = 1;  //debug
+				out_e = in_e - 13;
+				out_m = in_m << 13;
+			end else begin
+				instate = 2;  //debug
+				out_e = 0;
+				out_m = in_m << (in_e-1);
+			end	
+		end else if (in_m[14:2] == 13'b0000000000001) begin // 0.000000000001 = o_mantissa starts as
+			state = 3'b000; //debug
+			if (in_e < 2) begin
+				instate = 0;  //debug
+				out_e = 0;
+				out_m = in_m; 
+			end else if (in_e > 12) begin
+				instate = 1;  //debug
+				out_e = in_e - 12;
+				out_m = in_m << 12;
+			end else begin
+				instate = 2;  //debug
+				out_e = 0;
+				out_m = in_m << (in_e-1);
+			end	
+		end else if (in_m[14:3] == 12'b000000000001) begin // 0.00000000001 = o_mantissa starts as
+			state = 3'b000; //debug
+			if (in_e < 2) begin
+				instate = 0;  //debug
+				out_e = 0;
+				out_m = in_m; 
+			end else if (in_e > 11) begin
+				instate = 1;  //debug
+				out_e = in_e - 11;
+				out_m = in_m << 11;
+			end else begin
+				instate = 2;  //debug
+				out_e = 0;
+				out_m = in_m << (in_e-1);
+			end	
+		end else if (in_m[14:4] == 11'b00000000001) begin // 0.0000000001 = o_mantissa starts as
+			state = 3'b000; //debug
+			if (in_e < 2) begin
+				instate = 0;  //debug
+				out_e = 0;
+				out_m = in_m; 
+			end else if (in_e > 10) begin
+				instate = 1;  //debug
+				out_e = in_e - 10;
+				out_m = in_m << 10;
+			end else begin
+				instate = 2;  //debug
+				out_e = 0;
+				out_m = in_m << (in_e-1);
+			end	
+		end else if (in_m[14:5] == 10'b0000000001) begin // 0.000000001 = o_mantissa starts as
+			state = 3'b000; //debug
+			if (in_e < 2) begin
+				instate = 0;  //debug
+				out_e = 0;
+				out_m = in_m; 
+			end else if (in_e > 9) begin
+				instate = 1;  //debug
+				out_e = in_e - 9;
+				out_m = in_m << 9;
+			end else begin
+				instate = 2;  //debug
+				out_e = 0;
+				out_m = in_m << (in_e-1);
+			end	
+		end else if (in_m[14:6] == 9'b000000001) begin // 0.00000001 = o_mantissa starts as
+			state = 3'b000; //debug
+			if (in_e < 2) begin
+				instate = 0;  //debug
+				out_e = 0;
+				out_m = in_m; 
+			end else if (in_e > 8) begin
+				instate = 1;  //debug
+				out_e = in_e - 8;
+				out_m = in_m << 8;
+			end else begin
+				instate = 2;  //debug
+				out_e = 0;
+				out_m = in_m << (in_e-1);
+			end	
+		end else if (in_m[14:7] == 8'b00000001) begin // 0.0000001 = o_mantissa starts as
 			state = 3'b000; //debug
 			if (in_e < 2) begin
 				instate = 0;  //debug
@@ -301,7 +396,7 @@ module multiplication_normaliser(in_e, in_m, out_e, out_m);
 				instate = 0;  //debug
 				out_e = 0;
 				out_m = in_m; 
-			end else if (in_e > 4) begin
+			end else if (in_e > 6) begin
 				instate = 1;  //debug
 				out_e = in_e - 6;
 				out_m = in_m << 6;
@@ -391,9 +486,10 @@ module multiplication_normaliser(in_e, in_m, out_e, out_m);
 				out_m = in_m << 1;
 			end
 		end else begin
-			state = 3'b111; //debug // product[14] == 1
-			out_e = in_e;
-			out_m = in_m;
+			//nothing
+			//state = 3'b111; //debug // product[14] == 1 
+			//out_e = in_e;
+			//out_m = in_m;
 		end
   end
 endmodule

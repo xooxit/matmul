@@ -11,23 +11,22 @@
 module tb_add ();
 
 	parameter DATA_TYPE = 16; // data type width
-	parameter NUM_TESTS = 4;
+	parameter NUM_TESTS = 6;
 
 	reg clk = 0;
 	reg rst = 1;
 
 	reg [DATA_TYPE-1:0] input_A [0:NUM_TESTS-1] = 
-    // 3, 8, 1024, 1.25
-    {16'h4040, 16'h4100, 16'h4480, 16'h3FA0};
+    // 
+    {16'h04f8, 16'h04f8, 16'h0030, 16'h00c0, 16'h0188, 16'h0188};
     
 	reg [DATA_TYPE-1:0] input_B [0:NUM_TESTS-1] = 
     // 0, 1240, 8192, 2.5
-    {16'h0000, 16'h449B, 16'h4600, 16'h4020};
+    {16'h00c0, 16'h80c0, 16'h8020, 16'h8040, 16'h0040, 16'h8040};
     
 	reg [10:0] counter = 'd0;
 
-	reg [DATA_TYPE-1:0] O; // Expected = 3, 1248, 9216, 3.75  // 0x4040, 0x449C, 0x4610, 0x4070
- 
+	reg [DATA_TYPE-1:0] O; // Expected = 0x01e0, 0x0050, 0x0010, 0x0080, 0x0198, 0x0170 
 	reg [DATA_TYPE-1:0] A;
 	reg [DATA_TYPE-1:0] B;
 
@@ -56,7 +55,7 @@ module tb_add ();
 
 	// Print the mux inputs...
 	initial begin
-		#10 rst = 0;
+		#1 rst = 0;
 
 		#1000 $finish;
 	end
